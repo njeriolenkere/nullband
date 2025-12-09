@@ -1,0 +1,166 @@
+<!--Click anywhere on the page to activate audio (for browsers that require user interaction).-->
+<!-- https://webmidijs.org/docs/  read more here to understand the code-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MIDI MPK Mini Synthesizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
+</head>
+<body>
+
+<h2>MIDI MPK MINI → SYNTHESIZER</h2>
+<div id="output"></div>
+
+<button id="synthButton">Synth</button><!-- working-->
+<button id="pianoButton">Piano</button><!-- to be added -->
+<button id="drumButton">Drums</button><!-- to be added -->
+<!-- visualization added -->
+<label for="waveform">Waveform:</label>
+<select id="waveform">
+    <option value="sine">Sine</option>
+    <option value="square">Square</option>
+    <option value="sawtooth">Sawtooth</option>
+    <option value="triangle">Triangle</option>
+</select>
+<canvas id="waveformCanvas" width="800" height="400"></canvas>
+
+<script type="module">
+
+// Audio context for generating sound
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let activeNotes = {}; // Track currently playing notes
+const canvas = document.getElementById("waveformCanvas");
+const ctx = canvas.getContext("2d");
+
+// Initialize the current instrument
+let currentInstrument = "synth";
+
+// Enable Web MIDI
+WebMidi.enable().then(onEnabled).catch(err => alert(err));
+
+function onEnabled() {
+    const out = document.getElementById("output");
+
+    // No MIDI device found
+    if (WebMidi.inputs.length < 1) {
+        out.innerHTML += "No device detected.<br>";
+        return;
+    }
+
+    // Select first detected device (your MPK Mini)
+    const mySynth = WebMidi.inputs[0];
+
+    // Add MIDI listeners
+    mySynth.channels[1].addListener("noteon", e => {
+        switch (currentInstrument) {
+            case "synth":
+                playSynth(e.note.number);
+                break;
+            case "piano":
+                playPiano(e.note.number);
+                break;
+            case "drums":
+                playDrums(e.note.number);
+                break;
+        }
+    });
+
+    mySynth.channels[1].addListener("noteoff", e => {
+        stopSound(e.note.number);
+    });
+}
+
+// Function to play synth sound with customizable waveform
+function playSynth(note) {
+    if (activeNotes[note]) return; // Prevent multiple oscillators for the same note
+
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    const waveform = document.getElementById("waveform").value; // Get selected waveform
+
+    osc.type = waveform; // Set waveform type
+    osc.frequency.value = midiToFreq(note);
+    gain.gain.value = 0.5; // Set initial volume
+
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+
+    // Store the oscillator and gain
+    activeNotes[note] = { osc, gain };
+
+    // Call the drawing function
+    drawWaveform(note);
+
+    // Extend the stopping time to allow for gradual fade-out
+    osc.stop(audioCtx.currentTime + 1); // Allow it to stop after 1 second for gradual fading
+}
+
+
+function drawWaveform() {
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height); // Clear the canvas
+    ctx.strokeStyle = "blue"; // Set the stroke color
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    for (let x = 0; x < width; x++) {
+        let y = height / 2; // Start from the middle
+
+        // Sum the contributions of all active notes
+        for (const note in activeNotes) {
+            const frequency = midiToFreq(note);
+            const amplitude = 0.5;
+            const period = audioCtx.sampleRate / frequency;
+
+            // Calculate the sinusoidal contribution of each note
+            y += amplitude * (height / 2) * Math.sin((2 * Math.PI * x) / period);
+        }
+
+        // Normalize the Y value to ensure it remains within canvas bounds
+        y = Math.max(Math.min(y, height - 1), 1); // Prevent overflow
+        ctx.lineTo(x, y);
+    }
+
+    ctx.stroke();
+}
+
+
+
+
+// Function to stop sound for any instrument
+function stopSound(note) {
+    const noteData = activeNotes[note];
+    if (noteData) {
+        // Fade out volume over 0.5 seconds
+        noteData.gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        noteData.osc.stop(audioCtx.currentTime + 0.6); // Stop after fade
+        delete activeNotes[note];
+    }
+}
+
+// Helper function to convert MIDI note number to frequency (Hz)
+function midiToFreq(note) {
+    return 440 * Math.pow(2, (note - 69) / 12); // A4 = 440hz
+}
+
+// Button listeners for switching instruments
+document.getElementById("synthButton").addEventListener("click", () => {
+    currentInstrument = "synth";
+});
+
+document.getElementById("pianoButton").addEventListener("click", () => {
+    currentInstrument = "piano";
+});
+
+document.getElementById("drumButton").addEventListener("click", () => {
+    currentInstrument = "drums";
+});
+
+</script>
+</body>
+</html>
+
+
