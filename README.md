@@ -4,3 +4,4 @@ nullband is midi interfecae like garageband. You can develop it further to add d
 To learn the basics, read this: https://webmidijs.org/docs/
 
 
+<img width="793" height="478" alt="njeriolenkere" src="https://github.com/user-attachments/assets/f84c6bad-7fe2-4826-8fa4-2f65010cee3c" />
